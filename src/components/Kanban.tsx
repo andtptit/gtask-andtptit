@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { moveTask } from "@/app/actions/tasks";
@@ -12,27 +12,44 @@ const COLUMNS = ["new", "doing", "review", "done"] as const;
 
 export default function Kanban({ tasks }: { tasks: Task[] }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  const [items, setItems] = useState<Task[]>(tasks);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
+  const [justDropped, setJustDropped] = useState<string | null>(null);
+
+  // Đồng bộ khi server refresh (realtime / điều hướng)
+  useEffect(() => setItems(tasks), [tasks]);
 
   function handleDrop(e: React.DragEvent, status: string) {
     e.preventDefault();
     setDragOver(null);
+    setDraggingId(null);
     const id = e.dataTransfer.getData("text/plain");
     if (!id) return;
+    const current = items.find((t) => t.id === id);
+    if (!current || current.status === status) return;
+
+    // Optimistic: chuyển thẻ ngay, revert nếu server từ chối
+    const prev = items;
+    setItems(items.map((t) => (t.id === id ? { ...t, status } : t)));
+    setJustDropped(id);
+    setTimeout(() => setJustDropped(null), 600);
+
     startTransition(async () => {
       const res = await moveTask(id, status);
-      if (res?.error) alert(res.error);
+      if (res?.error) {
+        alert(res.error);
+        setItems(prev);
+      }
       router.refresh();
     });
   }
 
   return (
-    <div
-      className={`grid grid-cols-1 gap-4 md:grid-cols-4 ${isPending ? "opacity-60" : ""}`}
-    >
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
       {COLUMNS.map((col) => {
-        const colTasks = tasks.filter((t) => t.status === col);
+        const colTasks = items.filter((t) => t.status === col);
         return (
           <div
             key={col}
@@ -42,9 +59,9 @@ export default function Kanban({ tasks }: { tasks: Task[] }) {
             }}
             onDragLeave={() => setDragOver(null)}
             onDrop={(e) => handleDrop(e, col)}
-            className={`rounded-xl border p-3 ${
+            className={`kanban-col ${
               dragOver === col
-                ? "border-indigo-400 bg-indigo-50"
+                ? "kanban-col-over"
                 : "border-gray-200 bg-gray-100/60"
             }`}
           >
@@ -52,7 +69,7 @@ export default function Kanban({ tasks }: { tasks: Task[] }) {
               <span className="text-sm font-semibold text-gray-700">
                 {STATUS_LABELS[col]}
               </span>
-              <span className="rounded-full bg-white px-2 py-0.5 text-xs text-gray-500">
+              <span className="rounded-full bg-white px-2 py-0.5 text-xs text-gray-500 transition-all">
                 {colTasks.length}
               </span>
             </div>
@@ -63,11 +80,16 @@ export default function Kanban({ tasks }: { tasks: Task[] }) {
                   <div
                     key={t.id}
                     draggable
-                    onDragStart={(e) =>
-                      e.dataTransfer.setData("text/plain", t.id)
-                    }
-                    className={`cursor-grab rounded-lg border bg-white p-3 shadow-sm active:cursor-grabbing ${
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", t.id);
+                      e.dataTransfer.effectAllowed = "move";
+                      setDraggingId(t.id);
+                    }}
+                    onDragEnd={() => setDraggingId(null)}
+                    className={`kanban-card ${
                       overdue ? "border-red-300" : "border-gray-200"
+                    } ${draggingId === t.id ? "kanban-card-dragging" : ""} ${
+                      justDropped === t.id ? "kanban-card-dropped" : ""
                     }`}
                   >
                     <Link
@@ -88,7 +110,13 @@ export default function Kanban({ tasks }: { tasks: Task[] }) {
                 );
               })}
               {colTasks.length === 0 && (
-                <p className="px-1 py-4 text-center text-xs text-gray-400">
+                <p
+                  className={`rounded-lg border-2 border-dashed px-1 py-6 text-center text-xs transition-colors ${
+                    dragOver === col
+                      ? "border-indigo-300 text-indigo-500"
+                      : "border-transparent text-gray-400"
+                  }`}
+                >
                   Kéo thẻ vào đây
                 </p>
               )}
