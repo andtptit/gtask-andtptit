@@ -21,25 +21,29 @@ export default async function TaskListPage({
 }) {
   const supabase = createClient();
 
-  const [{ data: teamsData }, { data: usersData }, { data: labelsData }] =
-    await Promise.all([
-      supabase.from("teams").select("*").order("name"),
-      supabase.from("profiles").select("*").eq("is_active", true).order("name"),
-      supabase.from("labels").select("*").order("name"),
-    ]);
+  // Gộp cả query lọc nhãn vào cùng 1 lượt song song
+  const [
+    { data: teamsData },
+    { data: usersData },
+    { data: labelsData },
+    { data: labelRows },
+  ] = await Promise.all([
+    supabase.from("teams").select("*").order("name"),
+    supabase.from("profiles").select("*").eq("is_active", true).order("name"),
+    supabase.from("labels").select("*").order("name"),
+    searchParams.label
+      ? supabase
+          .from("task_labels")
+          .select("task_id")
+          .eq("label_id", searchParams.label)
+      : Promise.resolve({ data: null }),
+  ]);
   const teams = (teamsData || []) as Team[];
   const users = (usersData || []) as Profile[];
   const labels = (labelsData || []) as Label[];
-
-  // Lọc theo nhãn: lấy danh sách task_id trước
-  let labelTaskIds: string[] | null = null;
-  if (searchParams.label) {
-    const { data } = await supabase
-      .from("task_labels")
-      .select("task_id")
-      .eq("label_id", searchParams.label);
-    labelTaskIds = (data || []).map((r) => r.task_id as string);
-  }
+  const labelTaskIds: string[] | null = searchParams.label
+    ? ((labelRows || []) as { task_id: string }[]).map((r) => r.task_id)
+    : null;
 
   let query = supabase
     .from("tasks")

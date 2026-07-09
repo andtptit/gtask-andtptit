@@ -9,8 +9,11 @@ v2: giao việc, kanban kéo thả **realtime**, duyệt/trả lại việc, tas
 1. Tạo project tại [supabase.com](https://supabase.com) (free tier).
 2. Mở **SQL Editor** → dán toàn bộ nội dung `supabase/schema.sql` → Run.
 3. Tiếp tục dán `supabase/migration-v2.sql` → Run (đính kèm, nhãn, follower, storage, realtime).
-4. (Khuyến nghị cho nội bộ) Tắt xác nhận email: **Authentication → Sign In / Providers → Email → tắt "Confirm email"** — đăng ký xong dùng được ngay.
-5. Lấy **Project URL**, **anon key** và **service_role key** tại **Settings → API**.
+4. Tiếp tục dán `supabase/migration-v3.sql` → Run (enforce luồng duyệt việc ở DB, chặn đổi người giao việc, admin xóa được file).
+5. Tiếp tục dán `supabase/migration-v4-perf.sql` → Run (index tăng tốc truy vấn).
+6. Tiếp tục dán `supabase/migration-v5.sql` → Run (realtime cho chuông thông báo).
+7. (Khuyến nghị cho nội bộ) Tắt xác nhận email: **Authentication → Sign In / Providers → Email → tắt "Confirm email"** — đăng ký xong dùng được ngay.
+8. Lấy **Project URL**, **anon key** và **service_role key** tại **Settings → API**.
 
 ## 2. Chạy local
 
@@ -39,6 +42,8 @@ update public.profiles set role = 'admin' where email = 'email-cua-ban@gmail.com
 2. Vào [vercel.com](https://vercel.com) → **Add New Project** → import repo.
 3. Thêm 3 biến môi trường: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
 4. Deploy → nhận domain miễn phí dạng `https://gtask-xxx.vercel.app`.
+
+**Tốc độ:** `vercel.json` đã pin serverless function về region `sin1` (Singapore) để nằm cạnh Supabase — quan trọng nhất cho độ trễ. Khi tạo project Supabase hãy chọn region **Southeast Asia (Singapore)**; nếu Supabase của bạn ở region khác, sửa `sin1` trong `vercel.json` thành region Vercel gần đó ([danh sách](https://vercel.com/docs/edge-network/regions)).
 
 ## Phân quyền
 

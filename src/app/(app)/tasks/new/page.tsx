@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
+import { getUser } from "@/lib/auth";
 import { createTask } from "@/app/actions/tasks";
 import { PRIORITIES, PRIORITY_LABELS } from "@/lib/constants";
+import SubmitButton from "@/components/SubmitButton";
 import type { Profile, Team } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +13,7 @@ export default async function NewTaskPage({
   searchParams: { error?: string; parent?: string };
 }) {
   const supabase = createClient();
+  const user = await getUser();
   const [{ data: teamsData }, { data: usersData }] = await Promise.all([
     supabase.from("teams").select("*").order("name"),
     supabase
@@ -56,10 +59,16 @@ export default async function NewTaskPage({
           </div>
           <div>
             <label className="label">Người thực hiện *</label>
-            <select name="assignee_id" className="input" required>
+            {/* Mặc định giao cho chính mình — tránh giao nhầm người đầu danh sách */}
+            <select
+              name="assignee_id"
+              className="input"
+              required
+              defaultValue={user?.id}
+            >
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.name}
+                  {u.id === user?.id ? `${u.name} (tôi)` : u.name}
                 </option>
               ))}
             </select>
@@ -79,7 +88,9 @@ export default async function NewTaskPage({
             <input type="datetime-local" name="due_date" className="input" />
           </div>
         </div>
-        <button className="btn-primary justify-center">Giao việc</button>
+        <SubmitButton className="btn-primary justify-center">
+          Giao việc
+        </SubmitButton>
       </form>
     </div>
   );

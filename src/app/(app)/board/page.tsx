@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getLeaderTeamIds, getProfile, getUser } from "@/lib/auth";
 import Kanban from "@/components/Kanban";
 import RealtimeRefresher from "@/components/RealtimeRefresher";
 import { TASK_SELECT } from "@/lib/queries";
@@ -13,12 +14,7 @@ export default async function BoardPage({
   searchParams: { team?: string };
 }) {
   const supabase = createClient();
-
-  const { data: teamsData } = await supabase
-    .from("teams")
-    .select("*")
-    .order("name");
-  const teams = (teamsData || []) as Team[];
+  const user = await getUser(); // dedupe với layout
   const activeTeam = searchParams.team || "";
 
   let query = supabase
@@ -26,11 +22,32 @@ export default async function BoardPage({
     .select(TASK_SELECT)
     .neq("status", "cancelled")
     .order("due_date", { ascending: true, nullsFirst: false });
-
   if (activeTeam) query = query.eq("team_id", activeTeam);
 
-  const { data: tasksData } = await query;
+  // 1 lượt song song duy nhất (profile + leader đã được cache chung với layout)
+  const [me, leaderIds, { data: teamsData }, { data: tasksData }] =
+    await Promise.all([
+      getProfile(),
+      getLeaderTeamIds(),
+      supabase.from("teams").select("*").order("name"),
+      query,
+    ]);
+
+  const teams = (teamsData || []) as Team[];
+  const isManager = !!me && ["admin", "manager"].includes(me.role);
+  const leaderTeamIds = new Set(leaderIds);
   const tasks = (tasksData || []) as unknown as Task[];
+
+  // Task nào user hiện tại được duyệt (kéo vào/ra cột Hoàn thành)
+  const approvableIds = isManager
+    ? tasks.map((t) => t.id)
+    : tasks
+        .filter(
+          (t) =>
+            t.assigner_id === user!.id ||
+            (t.team_id !== null && leaderTeamIds.has(t.team_id))
+        )
+        .map((t) => t.id);
 
   return (
     <div className="flex flex-col gap-4">
@@ -61,7 +78,7 @@ export default async function BoardPage({
           </Link>
         ))}
       </div>
-      <Kanban tasks={tasks} />
+      <Kanban tasks={tasks} approvableIds={approvableIds} />
     </div>
   );
 }

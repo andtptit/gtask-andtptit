@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getLeaderTeamIds, getProfile } from "@/lib/auth";
 import type { Team } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -128,36 +129,24 @@ function StatTable({ title, stats }: { title: string; stats: Stat[] }) {
 
 export default async function ReportsPage() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  const { data: me } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user!.id)
-    .single();
+  // 1 lượt song song duy nhất (profile + leader cache chung với layout)
+  const [me, leaderTeamIds, { data: teamsData }, { data: tasksData }] =
+    await Promise.all([
+      getProfile(),
+      getLeaderTeamIds(),
+      supabase.from("teams").select("*").order("name"),
+      supabase
+        .from("tasks")
+        .select(
+          `id, status, team_id, assignee_id, due_date, completed_at, created_at,
+          assignee:profiles!tasks_assignee_id_fkey(name)`
+        )
+        .limit(5000),
+    ]);
 
-  // Leader cũng được xem (giới hạn dữ liệu theo RLS select-all → lọc phía dưới nếu cần)
-  const { data: leaderTeams } = await supabase
-    .from("team_members")
-    .select("team_id")
-    .eq("user_id", user!.id)
-    .eq("is_leader", true);
-  const isManager = me && ["admin", "manager"].includes(me.role);
-  const leaderTeamIds = (leaderTeams || []).map((r) => r.team_id as string);
+  const isManager = !!me && ["admin", "manager"].includes(me.role);
   if (!isManager && leaderTeamIds.length === 0) redirect("/");
-
-  const [{ data: teamsData }, { data: tasksData }] = await Promise.all([
-    supabase.from("teams").select("*").order("name"),
-    supabase
-      .from("tasks")
-      .select(
-        `id, status, team_id, assignee_id, due_date, completed_at, created_at,
-        assignee:profiles!tasks_assignee_id_fkey(name)`
-      )
-      .limit(5000),
-  ]);
   const teams = (teamsData || []) as Team[];
   let tasks = (tasksData || []) as unknown as RTask[];
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import RealtimeRefresher from "@/components/RealtimeRefresher";
-import { STATUS_COLORS } from "@/lib/constants";
+import { APP_TZ, STATUS_COLORS } from "@/lib/constants";
 import type { Team } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -24,11 +24,11 @@ export default async function CalendarPage({
 }) {
   const supabase = createClient();
 
+  // Ngày "hôm nay" theo giờ VN (server chạy UTC), dạng "YYYY-MM-DD"
+  const todayKey = new Date().toLocaleDateString("sv-SE", { timeZone: APP_TZ });
+
   // month dạng "2026-07"
-  const now = new Date();
-  const [y, m] = (
-    searchParams.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-  )
+  const [y, m] = (searchParams.month || todayKey.slice(0, 7))
     .split("-")
     .map(Number);
   const monthStart = new Date(y, m - 1, 1);
@@ -67,9 +67,14 @@ export default async function CalendarPage({
   const { data: tasksData } = await query;
   const tasks = (tasksData || []) as unknown as CalTask[];
 
+  // Nhóm theo ngày giờ VN (không dùng toDateString — sẽ lệch ngày theo UTC)
+  const dayKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const byDay = new Map<string, CalTask[]>();
   for (const t of tasks) {
-    const k = new Date(t.due_date).toDateString();
+    const k = new Date(t.due_date).toLocaleDateString("sv-SE", {
+      timeZone: APP_TZ,
+    });
     if (!byDay.has(k)) byDay.set(k, []);
     byDay.get(k)!.push(t);
   }
@@ -146,8 +151,8 @@ export default async function CalendarPage({
           ))}
           {days.map((d) => {
             const inMonth = d.getMonth() === m - 1;
-            const isToday = d.toDateString() === now.toDateString();
-            const dayTasks = byDay.get(d.toDateString()) || [];
+            const isToday = dayKey(d) === todayKey;
+            const dayTasks = byDay.get(dayKey(d)) || [];
             return (
               <div
                 key={d.toISOString()}

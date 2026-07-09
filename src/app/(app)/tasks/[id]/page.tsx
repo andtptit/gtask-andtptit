@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getLeaderTeamIds, getProfile, getUser } from "@/lib/auth";
 import { changeStatus, deleteTask, updateTask } from "@/app/actions/tasks";
 import { deleteComment } from "@/app/actions/comments";
 import { createLabel, setTaskLabels, toggleFollow } from "@/app/actions/labels";
@@ -9,13 +10,34 @@ import TaskCard from "@/components/TaskCard";
 import AttachmentSection from "@/components/AttachmentSection";
 import CommentBox from "@/components/CommentBox";
 import LabelChips from "@/components/LabelChips";
+import SubmitButton from "@/components/SubmitButton";
 import {
   LABEL_COLORS,
   PRIORITIES,
   PRIORITY_LABELS,
-  fmtDate,
+  fmtDateTime,
   isOverdue,
+  toDatetimeLocal,
 } from "@/lib/constants";
+
+// Highlight "@Tên" trong bình luận
+function renderWithMentions(content: string, names: string[]) {
+  if (names.length === 0) return content;
+  const escaped = names
+    .slice()
+    .sort((a, b) => b.length - a.length)
+    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const parts = content.split(new RegExp(`@(${escaped.join("|")})`, "g"));
+  return parts.map((p, i) =>
+    i % 2 === 1 ? (
+      <span key={i} className="font-medium text-indigo-600">
+        @{p}
+      </span>
+    ) : (
+      p
+    )
+  );
+}
 import { TASK_SELECT } from "@/lib/queries";
 import type {
   Attachment,
@@ -34,63 +56,50 @@ export default async function TaskDetailPage({
   params: { id: string };
 }) {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getUser(); // dedupe với layout
 
-  const { data: taskData } = await supabase
-    .from("tasks")
-    .select(TASK_SELECT)
-    .eq("id", params.id)
-    .single();
-  if (!taskData) notFound();
-  const task = taskData as unknown as Task;
-
+  // Mọi query chỉ cần params.id → gộp tất cả vào 1 lượt song song duy nhất
   const [
-    { data: me },
+    { data: taskData },
+    me,
+    leaderTeamIds,
     { data: commentsData },
     { data: subtasksData },
-    { data: leaderRow },
     { data: teamsData },
     { data: usersData },
     { data: attachmentsData },
     { data: labelsData },
     { data: followersData },
   ] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user!.id).single(),
+    supabase.from("tasks").select(TASK_SELECT).eq("id", params.id).single(),
+    getProfile(),
+    getLeaderTeamIds(),
     supabase
       .from("comments")
       .select("*, author:profiles(id,name)")
-      .eq("task_id", task.id)
+      .eq("task_id", params.id)
       .order("created_at"),
     supabase
       .from("tasks")
       .select(TASK_SELECT)
-      .eq("parent_task_id", task.id)
+      .eq("parent_task_id", params.id)
       .order("created_at"),
-    task.team_id
-      ? supabase
-          .from("team_members")
-          .select("is_leader")
-          .eq("team_id", task.team_id)
-          .eq("user_id", user!.id)
-          .eq("is_leader", true)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
     supabase.from("teams").select("*").order("name"),
     supabase.from("profiles").select("*").eq("is_active", true).order("name"),
     supabase
       .from("attachments")
       .select("*, uploader:profiles(id,name)")
-      .eq("task_id", task.id)
+      .eq("task_id", params.id)
       .order("created_at"),
     supabase.from("labels").select("*").order("name"),
     supabase
       .from("task_followers")
       .select("user_id, follower:profiles(id,name)")
-      .eq("task_id", task.id),
+      .eq("task_id", params.id),
   ]);
 
+  if (!taskData) notFound();
+  const task = taskData as unknown as Task;
   const profile = me as Profile;
   const comments = (commentsData || []) as unknown as Comment[];
   const subtasks = (subtasksData || []) as unknown as Task[];
@@ -110,7 +119,7 @@ export default async function TaskDetailPage({
   const isAssignee = task.assignee_id === user!.id;
   const isAssigner = task.assigner_id === user!.id;
   const isManager = profile.role === "admin" || profile.role === "manager";
-  const isLeader = !!leaderRow;
+  const isLeader = !!task.team_id && leaderTeamIds.includes(task.team_id);
   const canApprove = isAssigner || isManager || isLeader;
   const canEdit = isAssigner || isManager || isLeader;
   const overdue = isOverdue(task);
@@ -126,12 +135,9 @@ export default async function TaskDetailPage({
             <PriorityBadge priority={task.priority} />
             <form action={toggleFollow}>
               <input type="hidden" name="task_id" value={task.id} />
-              <button
-                className="btn-secondary !px-2 !py-1 text-xs"
-                title={isFollowing ? "Bỏ theo dõi" : "Theo dõi để nhận thông báo"}
-              >
+              <SubmitButton className="btn-secondary !px-2 !py-1 text-xs">
                 {isFollowing ? "🔕 Bỏ theo dõi" : "🔔 Theo dõi"}
-              </button>
+              </SubmitButton>
             </form>
           </div>
         </div>
@@ -154,7 +160,7 @@ export default async function TaskDetailPage({
           <div>
             <span className="block text-xs text-gray-400">Deadline</span>
             <span className={overdue ? "font-semibold text-red-600" : ""}>
-              {fmtDate(task.due_date)}
+              {fmtDateTime(task.due_date)}
               {overdue && " (trễ hạn)"}
             </span>
           </div>
@@ -177,14 +183,14 @@ export default async function TaskDetailPage({
             <form action={changeStatus}>
               <input type="hidden" name="task_id" value={task.id} />
               <input type="hidden" name="status" value="doing" />
-              <button className="btn-primary">▶ Bắt đầu làm</button>
+              <SubmitButton>▶ Bắt đầu làm</SubmitButton>
             </form>
           )}
           {task.status === "doing" && isAssignee && (
             <form action={changeStatus}>
               <input type="hidden" name="task_id" value={task.id} />
               <input type="hidden" name="status" value="review" />
-              <button className="btn-primary">📤 Nộp duyệt</button>
+              <SubmitButton>📤 Nộp duyệt</SubmitButton>
             </form>
           )}
           {task.status === "review" && canApprove && (
@@ -192,7 +198,7 @@ export default async function TaskDetailPage({
               <form action={changeStatus}>
                 <input type="hidden" name="task_id" value={task.id} />
                 <input type="hidden" name="status" value="done" />
-                <button className="btn-primary">✅ Duyệt hoàn thành</button>
+                <SubmitButton>✅ Duyệt hoàn thành</SubmitButton>
               </form>
               <form action={changeStatus} className="flex items-center gap-2">
                 <input type="hidden" name="task_id" value={task.id} />
@@ -202,7 +208,7 @@ export default async function TaskDetailPage({
                   className="input !w-56"
                   placeholder="Lý do trả lại..."
                 />
-                <button className="btn-secondary">↩ Trả lại</button>
+                <SubmitButton className="btn-secondary">↩ Trả lại</SubmitButton>
               </form>
             </>
           )}
@@ -211,7 +217,12 @@ export default async function TaskDetailPage({
               <form action={changeStatus}>
                 <input type="hidden" name="task_id" value={task.id} />
                 <input type="hidden" name="status" value="cancelled" />
-                <button className="btn-secondary text-red-600">Hủy việc</button>
+                <SubmitButton
+                  className="btn-secondary text-red-600"
+                  confirmText="Hủy việc này? Task sẽ chuyển sang trạng thái Đã hủy."
+                >
+                  Hủy việc
+                </SubmitButton>
               </form>
             )}
           <Link href={`/tasks/new?parent=${task.id}`} className="btn-secondary">
@@ -253,7 +264,7 @@ export default async function TaskDetailPage({
                 </span>
               )}
             </div>
-            <button className="btn-primary mt-3">Lưu nhãn</button>
+            <SubmitButton className="btn-primary mt-3">Lưu nhãn</SubmitButton>
           </form>
           <form
             action={createLabel}
@@ -273,7 +284,7 @@ export default async function TaskDetailPage({
                 </option>
               ))}
             </select>
-            <button className="btn-secondary">+ Tạo nhãn</button>
+            <SubmitButton className="btn-secondary">+ Tạo nhãn</SubmitButton>
           </form>
         </details>
       )}
@@ -354,24 +365,23 @@ export default async function TaskDetailPage({
                   type="datetime-local"
                   name="due_date"
                   className="input"
-                  defaultValue={
-                    task.due_date
-                      ? new Date(task.due_date).toISOString().slice(0, 16)
-                      : ""
-                  }
+                  defaultValue={toDatetimeLocal(task.due_date)}
                 />
               </div>
             </div>
             <div className="flex justify-between">
-              <button className="btn-primary">Lưu thay đổi</button>
+              <SubmitButton>Lưu thay đổi</SubmitButton>
             </div>
           </form>
           {(isAssigner || profile.role === "admin") && (
             <form action={deleteTask} className="mt-3 border-t border-gray-100 pt-3">
               <input type="hidden" name="task_id" value={task.id} />
-              <button className="text-sm text-red-600 hover:underline">
+              <SubmitButton
+                className="text-sm text-red-600 hover:underline"
+                confirmText={`Xóa vĩnh viễn "${task.title}"? Bình luận, file đính kèm và task con sẽ mất liên kết. Không thể hoàn tác.`}
+              >
                 Xóa việc này
-              </button>
+              </SubmitButton>
             </form>
           )}
         </details>
@@ -421,19 +431,24 @@ export default async function TaskDetailPage({
                   {c.author?.name}
                 </span>
                 <span className="flex items-center gap-2">
-                  {new Date(c.created_at).toLocaleString("vi-VN")}
+                  {fmtDateTime(c.created_at)}
                   {c.user_id === user!.id && (
                     <form action={deleteComment}>
                       <input type="hidden" name="comment_id" value={c.id} />
                       <input type="hidden" name="task_id" value={task.id} />
-                      <button className="text-red-500 hover:underline">
+                      <SubmitButton
+                        className="text-red-500 hover:underline"
+                        confirmText="Xóa bình luận này?"
+                      >
                         Xóa
-                      </button>
+                      </SubmitButton>
                     </form>
                   )}
                 </span>
               </div>
-              <p className="mt-1 whitespace-pre-wrap text-sm">{c.content}</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm">
+                {renderWithMentions(c.content, users.map((u) => u.name))}
+              </p>
             </div>
           ))}
         </div>

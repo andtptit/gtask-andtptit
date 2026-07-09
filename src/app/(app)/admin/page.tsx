@@ -8,6 +8,7 @@ import {
   updateUser,
 } from "@/app/actions/admin";
 import { ROLE_LABELS } from "@/lib/constants";
+import SubmitButton from "@/components/SubmitButton";
 import type { Profile, Team } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -101,7 +102,9 @@ export default async function AdminPage({
                 ))}
               </select>
             </div>
-            <button className="btn-primary justify-center">+ Tạo tài khoản</button>
+            <SubmitButton className="btn-primary justify-center">
+              + Tạo tài khoản
+            </SubmitButton>
             <p className="col-span-2 text-xs text-gray-500 md:col-span-5">
               Tài khoản được kích hoạt ngay (không cần xác nhận email). Nếu bỏ
               trống mật khẩu, hệ thống dùng <code>GTask@123</code>. Cần cấu hình{" "}
@@ -164,9 +167,9 @@ export default async function AdminPage({
                         />
                         Active
                       </label>
-                      <button className="btn-secondary !px-2 !py-1 text-xs">
+                      <SubmitButton className="btn-secondary !px-2 !py-1 text-xs">
                         Lưu
-                      </button>
+                      </SubmitButton>
                     </form>
                   </td>
                 </tr>
@@ -220,9 +223,12 @@ export default async function AdminPage({
                         <form action={removeTeamMember}>
                           <input type="hidden" name="team_id" value={team.id} />
                           <input type="hidden" name="user_id" value={m.user_id} />
-                          <button className="text-red-500 hover:underline">
+                          <SubmitButton
+                            className="text-red-500 hover:underline"
+                            confirmText="Xóa thành viên này khỏi nhóm?"
+                          >
                             Xóa
-                          </button>
+                          </SubmitButton>
                         </form>
                       </span>
                     </div>
@@ -241,9 +247,9 @@ export default async function AdminPage({
                         </option>
                       ))}
                     </select>
-                    <button className="btn-secondary shrink-0 !px-2 text-xs">
+                    <SubmitButton className="btn-secondary shrink-0 !px-2 text-xs">
                       + Thêm
-                    </button>
+                    </SubmitButton>
                   </form>
                 )}
               </div>

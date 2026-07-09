@@ -50,13 +50,48 @@ export const ROLE_LABELS: Record<string, string> = {
   member: "Nhân viên",
 };
 
+// App nội bộ VN — server (Vercel) chạy UTC nên phải chỉ định timezone tường minh
+export const APP_TZ = "Asia/Ho_Chi_Minh";
+export const APP_TZ_OFFSET = "+07:00";
+
 export function fmtDate(d: string | null | undefined) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("vi-VN", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    timeZone: APP_TZ,
   });
+}
+
+export function fmtDateTime(d: string | null | undefined) {
+  if (!d) return "—";
+  return new Date(d).toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: APP_TZ,
+  });
+}
+
+// timestamptz (UTC) → giá trị cho <input type="datetime-local"> theo giờ VN
+export function toDatetimeLocal(d: string | null | undefined) {
+  if (!d) return "";
+  // sv-SE cho định dạng "YYYY-MM-DD HH:mm:ss"
+  return new Date(d)
+    .toLocaleString("sv-SE", { timeZone: APP_TZ })
+    .slice(0, 16)
+    .replace(" ", "T");
+}
+
+// Giá trị datetime-local ("2026-07-09T15:00", giờ VN) → ISO UTC để lưu timestamptz
+export function dueDateToUtc(v: string | null | undefined) {
+  if (!v) return null;
+  const withSec = v.length === 16 ? `${v}:00` : v;
+  const date = new Date(`${withSec}${APP_TZ_OFFSET}`);
+  return isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 export function isOverdue(task: { due_date: string | null; status: string }) {

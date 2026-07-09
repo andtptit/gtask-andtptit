@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getUser } from "@/lib/auth";
 import TaskCard from "@/components/TaskCard";
 import { TASK_SELECT } from "@/lib/queries";
 import type { Task } from "@/lib/types";
@@ -7,9 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function MyTasksPage() {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getUser(); // dedupe với layout — không gọi mạng lần 2
 
   const [{ data: mine }, { data: waitingReview }] = await Promise.all([
     supabase

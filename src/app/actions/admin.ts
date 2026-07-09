@@ -38,7 +38,8 @@ export async function createMember(formData: FormData) {
 
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const name = String(formData.get("name") || "").trim();
-  const password = String(formData.get("password") || "").trim() || "GTask@123";
+  const customPassword = String(formData.get("password") || "").trim();
+  const password = customPassword || "GTask@123";
   const role = String(formData.get("role") || "member");
   if (!email || !name) return;
 
@@ -65,9 +66,15 @@ export async function createMember(formData: FormData) {
   }
 
   revalidatePath("/admin");
+  // Không đưa mật khẩu vào URL (lọt vào history / log server)
+  const pwNote = customPassword
+    ? "với mật khẩu bạn đã nhập"
+    : "với mật khẩu mặc định GTask@123";
   redirect(
     "/admin?ok=" +
-      encodeURIComponent(`Đã tạo ${email} (mật khẩu: ${password}). Nhắc thành viên đổi mật khẩu sau khi đăng nhập.`)
+      encodeURIComponent(
+        `Đã tạo ${email} ${pwNote}. Nhắc thành viên đổi mật khẩu sau khi đăng nhập.`
+      )
   );
 }
 

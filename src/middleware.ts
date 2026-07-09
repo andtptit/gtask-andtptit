@@ -27,15 +27,18 @@ export async function middleware(request: NextRequest) {
     }
   );
 
+  // getSession đọc từ cookie (không gọi mạng, chỉ refresh token khi hết hạn)
+  // — nhanh hơn hẳn getUser. Redirect ở đây chỉ là UX; dữ liệu đã được bảo vệ
+  // bằng RLS, và layout vẫn gọi getUser (verified) 1 lần mỗi request.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
   const isLoginPage = request.nextUrl.pathname.startsWith("/login");
-  if (!user && !isLoginPage) {
+  if (!session && !isLoginPage) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
-  if (user && isLoginPage) {
+  if (session && isLoginPage) {
     return NextResponse.redirect(new URL("/", request.url));
   }
   return response;

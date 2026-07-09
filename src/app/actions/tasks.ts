@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { STATUS_LABELS } from "@/lib/constants";
+import { STATUS_LABELS, dueDateToUtc } from "@/lib/constants";
 
 type Supa = ReturnType<typeof createClient>;
 
@@ -49,7 +49,7 @@ export async function createTask(formData: FormData) {
     assignee_id: String(formData.get("assignee_id") || user.id),
     assigner_id: user.id,
     priority: String(formData.get("priority") || "medium"),
-    due_date: String(formData.get("due_date") || "") || null,
+    due_date: dueDateToUtc(String(formData.get("due_date") || "")),
     parent_task_id: String(formData.get("parent_task_id") || "") || null,
   };
 
@@ -173,7 +173,7 @@ export async function updateTask(formData: FormData) {
     team_id: String(formData.get("team_id") || "") || null,
     assignee_id: String(formData.get("assignee_id")),
     priority: String(formData.get("priority") || "medium"),
-    due_date: String(formData.get("due_date") || "") || null,
+    due_date: dueDateToUtc(String(formData.get("due_date") || "")),
   };
   if (!payload.title) return;
 

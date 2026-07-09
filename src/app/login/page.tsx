@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { AppSkeleton } from "@/components/Skeletons";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "signup">("login");
@@ -12,8 +13,17 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+
+  function goHome() {
+    // Hiện skeleton toàn app trong lúc server render trang chủ;
+    // trang login unmount khi điều hướng xong
+    setRedirecting(true);
+    router.push("/");
+    router.refresh();
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,9 +38,9 @@ export default function LoginPage() {
       });
       if (error) {
         setError("Email hoặc mật khẩu không đúng.");
+        setLoading(false);
       } else {
-        router.push("/");
-        router.refresh();
+        goHome();
       }
     } else {
       const { data, error } = await supabase.auth.signUp({
@@ -41,14 +51,16 @@ export default function LoginPage() {
       if (error) {
         setError(error.message);
       } else if (data.session) {
-        router.push("/");
-        router.refresh();
+        goHome();
+        return;
       } else {
         setInfo("Đăng ký thành công. Kiểm tra email để xác nhận tài khoản.");
       }
+      setLoading(false);
     }
-    setLoading(false);
   }
+
+  if (redirecting) return <AppSkeleton />;
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">

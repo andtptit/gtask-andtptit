@@ -1,3 +1,36 @@
+// Toàn app (header + nội dung) — hiển thị ngay sau khi đăng nhập thành công
+// trong lúc chờ server render trang chủ
+export function AppSkeleton() {
+  return (
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-10 border-b border-gray-200 bg-white">
+        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+          <div className="skeleton h-6 w-16" />
+          <div className="flex items-center gap-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="skeleton h-7 w-20 rounded-lg" />
+            ))}
+          </div>
+          <div className="ml-auto flex items-center gap-3">
+            <div className="skeleton h-7 w-9 rounded-lg" />
+            <div>
+              <div className="skeleton h-4 w-24" />
+              <div className="skeleton mt-1 h-3 w-16" />
+            </div>
+            <div className="skeleton h-8 w-14 rounded-lg" />
+          </div>
+        </div>
+      </header>
+      <main className="mx-auto max-w-6xl px-4 py-6">
+        <PageHeaderSkeleton />
+        <div className="mt-6">
+          <CardGridSkeleton />
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export function TaskCardSkeleton() {
   return (
     <div className="card">

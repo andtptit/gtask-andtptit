@@ -59,7 +59,11 @@ export default function AttachmentSection({
         size: file.size,
         uploaded_by: userId,
       });
-      if (dbErr) setError(dbErr.message);
+      if (dbErr) {
+        // Ghi DB thất bại → dọn file vừa upload, tránh file mồ côi trong Storage
+        await supabase.storage.from("attachments").remove([path]);
+        setError(`Không lưu được file: ${dbErr.message}`);
+      }
     }
     setBusy(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -69,8 +73,21 @@ export default function AttachmentSection({
   async function handleDelete(att: Attachment) {
     if (!confirm(`Xóa file "${att.file_name}"?`)) return;
     setBusy(true);
-    await supabase.storage.from("attachments").remove([att.file_path]);
-    await supabase.from("attachments").delete().eq("id", att.id);
+    setError("");
+
+    // Xóa row DB trước (RLS quyết định quyền), thành công mới xóa file Storage
+    const { error: dbErr } = await supabase
+      .from("attachments")
+      .delete()
+      .eq("id", att.id);
+    if (dbErr) {
+      setError(`Không xóa được: ${dbErr.message}`);
+    } else {
+      const { error: stErr } = await supabase.storage
+        .from("attachments")
+        .remove([att.file_path]);
+      if (stErr) setError(`Đã xóa bản ghi nhưng file chưa xóa được: ${stErr.message}`);
+    }
     setBusy(false);
     router.refresh();
   }
