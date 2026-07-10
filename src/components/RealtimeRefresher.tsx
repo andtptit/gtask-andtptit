@@ -10,21 +10,38 @@ export default function RealtimeRefresher() {
 
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel("tasks-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "tasks" },
-        () => {
-          // debounce: nhiều thay đổi liên tiếp chỉ refresh 1 lần
-          if (timer.current) clearTimeout(timer.current);
-          timer.current = setTimeout(() => router.refresh(), 400);
-        }
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    // Nạp session và setAuth TRƯỚC khi subscribe — nếu không, socket bị RLS
+    // coi là anonymous và không nhận được event nào
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) supabase.realtime.setAuth(session.access_token);
+      if (cancelled) return;
+
+      channel = supabase
+        .channel("tasks-realtime")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "tasks" },
+          () => {
+            // debounce: nhiều thay đổi liên tiếp chỉ refresh 1 lần
+            if (timer.current) clearTimeout(timer.current);
+            timer.current = setTimeout(() => router.refresh(), 400);
+          }
+        )
+        .subscribe((status) => {
+          console.log("[GTask] tasks realtime:", status);
+        });
+    })();
+
     return () => {
+      cancelled = true;
       if (timer.current) clearTimeout(timer.current);
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [router]);
 

@@ -16,12 +16,35 @@ export default function NotificationBell({
   notifications: Notification[];
 }) {
   const [open, setOpen] = useState(false);
+  const [toasts, setToasts] = useState<Notification[]>([]);
   const [, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
 
   const unread = notifications.filter((n) => !n.is_read).length;
+
+  function dismissToast(id: string) {
+    setToasts((t) => t.filter((x) => x.id !== id));
+  }
+
+  function pushToast(n: Notification) {
+    setToasts((t) => [...t.slice(-3), n]); // tối đa 4 toast cùng lúc
+    setTimeout(() => dismissToast(n.id), 6000);
+  }
+
+  // Xin quyền browser notification (hiện thông báo khi đang ở tab/app khác)
+  useEffect(() => {
+    if (
+      typeof Notification !== "undefined" &&
+      Notification.permission === "default"
+    ) {
+      const t = setTimeout(() => {
+        Notification.requestPermission().catch(() => {});
+      }, 3000);
+      return () => clearTimeout(t);
+    }
+  }, []);
 
   // Đóng khi click ra ngoài
   useEffect(() => {
@@ -33,10 +56,23 @@ export default function NotificationBell({
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  // Realtime: có thông báo mới → refresh (cần migration-v5 bật realtime cho bảng notifications)
+  // Realtime: có thông báo mới → toast + browser notification + refresh
+  // (cần migration-v5/v9 bật realtime cho bảng notifications)
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    // QUAN TRỌNG: phải nạp session và setAuth TRƯỚC khi subscribe —
+    // nếu không, socket bị RLS coi là anonymous và không nhận được event nào
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) supabase.realtime.setAuth(session.access_token);
+      if (cancelled) return;
+
+      channel = supabase
       .channel("notifications-realtime")
       .on(
         "postgres_changes",
@@ -46,15 +82,42 @@ export default function NotificationBell({
           table: "notifications",
           filter: `user_id=eq.${userId}`,
         },
-        () => {
+        (payload) => {
+          const n = payload.new as Notification;
+
+          // 1. Toast banner góc phải màn hình (khi đang mở app)
+          pushToast(n);
+
+          // 2. Browser notification (khi đang ở tab/cửa sổ khác)
+          if (
+            typeof Notification !== "undefined" &&
+            Notification.permission === "granted" &&
+            (document.hidden || !document.hasFocus())
+          ) {
+            const bn = new Notification("GTask — Thông báo mới", {
+              body: n.content,
+              tag: n.id,
+            });
+            bn.onclick = () => {
+              window.focus();
+              window.location.href = n.task_id ? `/tasks/${n.task_id}` : "/";
+            };
+          }
+
           if (timer.current) clearTimeout(timer.current);
           timer.current = setTimeout(() => router.refresh(), 400);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Mở DevTools Console để chẩn đoán: phải thấy "SUBSCRIBED"
+        console.log("[GTask] notifications realtime:", status);
+      });
+    })();
+
     return () => {
+      cancelled = true;
       if (timer.current) clearTimeout(timer.current);
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [userId, router]);
 
@@ -65,6 +128,38 @@ export default function NotificationBell({
 
   return (
     <div className="relative" ref={ref}>
+      {/* Toast banner góc phải màn hình */}
+      {toasts.length > 0 && (
+        <div className="fixed right-4 top-16 z-50 flex w-80 max-w-[90vw] flex-col gap-2">
+          {toasts.map((t) => (
+            <Link
+              key={t.id}
+              href={t.task_id ? `/tasks/${t.task_id}` : "/"}
+              onClick={() => {
+                dismissToast(t.id);
+                startTransition(() => markRead(t.id));
+              }}
+              className="toast-enter flex items-start gap-2 rounded-xl border border-indigo-200 bg-white p-3 shadow-xl transition-colors hover:border-indigo-400 hover:bg-indigo-50"
+            >
+              <span className="shrink-0">🔔</span>
+              <span className="min-w-0 flex-1 text-sm leading-snug text-gray-800">
+                {t.content}
+              </span>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  dismissToast(t.id);
+                }}
+                className="shrink-0 text-gray-400 hover:text-gray-600"
+                title="Đóng"
+              >
+                ✕
+              </button>
+            </Link>
+          ))}
+        </div>
+      )}
       <button
         onClick={() => setOpen((o) => !o)}
         className="flex items-center rounded-lg px-2 py-1.5 hover:bg-gray-100"
