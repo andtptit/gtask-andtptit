@@ -8,7 +8,7 @@ v2: giao việc, kanban kéo thả **realtime**, duyệt/trả lại việc, tas
 
 1. Tạo project tại [supabase.com](https://supabase.com) (free tier).
 2. Mở **SQL Editor** → dán toàn bộ nội dung `supabase/schema.sql` → Run.
-3. Tiếp tục dán `supabase/migration-v2.sql` → Run (đính kèm, nhãn, follower, storage, realtime).
+3. Tiếp tục chạy lần lượt `supabase/migration-v2.sql` → `migration-v3.sql` → `migration-v4-perf.sql` → `migration-v5.sql` → `migration-v6.sql` → `migration-v7.sql` → `migration-v8.sql`.
 4. Tiếp tục dán `supabase/migration-v3.sql` → Run (enforce luồng duyệt việc ở DB, chặn đổi người giao việc, admin xóa được file).
 5. Tiếp tục dán `supabase/migration-v4-perf.sql` → Run (index tăng tốc truy vấn).
 6. Tiếp tục dán `supabase/migration-v5.sql` → Run (realtime cho chuông thông báo).
@@ -68,6 +68,28 @@ Phân quyền được enforce bằng **Row Level Security** ngay tầng databas
 - **Realtime** bật cho bảng `tasks` — kanban và lịch tự cập nhật khi người khác thay đổi.
 - **Báo cáo:** admin/trưởng phòng xem toàn phòng; leader chỉ thấy nhóm mình.
 - **Admin tạo thành viên:** trang Quản trị → "Thêm thành viên mới" (mật khẩu mặc định `GTask@123` nếu bỏ trống).
+
+## Ghi chú v3 (migration-v6)
+
+- **Kết quả công việc:** mỗi task có mục "📝 Kết quả công việc" — người thực hiện viết kết quả hoặc dán link Drive/Docs/bài đăng.
+- **Chặn nộp duyệt rỗng:** nút "Nộp duyệt" (và kéo thẻ vào cột Chờ duyệt) yêu cầu đã điền kết quả HOẶC có file đính kèm — enforce cả ở app lẫn trigger DB.
+- **Thêm người theo dõi:** tại task, chọn thành viên (kể cả nhóm khác) → "+ Thêm theo dõi". Người được thêm nhận thông báo và theo dõi đầy đủ diễn biến task (đổi trạng thái, bình luận, kết quả). Gỡ theo dõi: chính mình hoặc admin/manager.
+
+## Ghi chú v4 (migration-v7)
+
+- **Phân quyền động:** trang Quản trị → "Phân quyền vai trò" — admin tích chọn từng quyền cho Manager / Leader / Nhân viên (Admin cố định full quyền). Nút **"↺ Reset về mặc định"** khôi phục đúng ma trận ban đầu. Quyền được enforce ở cả UI lẫn tầng DB (RLS/trigger đọc bảng `role_permissions`).
+- Ý nghĩa scope: quyền "Duyệt việc" với Manager áp dụng mọi nhóm, với Leader/Nhân viên chỉ áp dụng nhóm mình tham gia; tắt "Xem việc của người khác" thì user chỉ thấy việc mình giao/nhận/theo dõi.
+- **Chặn deadline quá khứ:** tạo hoặc sửa deadline về thời điểm quá khứ sẽ bị từ chối (cả việc cha lẫn task con) — check ở server action + trigger DB. Task cũ đã trễ hạn vẫn sửa được các field khác bình thường.
+
+## Ghi chú v5 (migration-v8)
+
+- **Sửa thông tin việc** (tiêu đề, mô tả, nhóm, người thực hiện, ưu tiên, deadline): chỉ **admin, manager và người giao việc**. Follower/member/leader không sửa được — chặn ở cả UI lẫn trigger DB `protect_task_info` (gọi API trực tiếp cũng bị từ chối). Người thực hiện vẫn đổi trạng thái + điền kết quả bình thường.
+- **Thông báo khi sửa:** mọi thay đổi thông tin task đều bắn chuông 🔔 cho người giao, người thực hiện (cũ + mới nếu bị đổi người) và toàn bộ người theo dõi.
+
+## Ghi chú v6 (quản lý user nghỉ việc)
+
+- **Xóa user (admin):** trang Quản trị → nút "Xóa" ở mỗi thành viên — chỉ xóa được tài khoản **chưa phát sinh** task/bình luận/file (dành cho tài khoản tạo nhầm). User đã hoạt động sẽ bị từ chối kèm hướng dẫn dùng Active. Không tự xóa được chính mình.
+- **Chặn user inactive:** bỏ tick Active là chặn hoàn toàn — đăng nhập mới bị từ chối ngay tại trang login; phiên đang mở bị đăng xuất ở lần tải trang kế tiếp. Quy trình nhân viên nghỉ: bỏ tick Active → gán lại task đang mở → (tùy chọn) gỡ khỏi nhóm. Không cần xóa user.
 
 ## Chưa có (roadmap)
 

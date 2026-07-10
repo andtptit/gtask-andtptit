@@ -2,14 +2,22 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLeaderTeamIds, getProfile, getUser } from "@/lib/auth";
+import { getMyPermRole, getMyTeamIds, getPermMap } from "@/lib/permissions";
 import { changeStatus, deleteTask, updateTask } from "@/app/actions/tasks";
 import { deleteComment } from "@/app/actions/comments";
-import { createLabel, setTaskLabels, toggleFollow } from "@/app/actions/labels";
+import {
+  addFollower,
+  createLabel,
+  removeFollower,
+  setTaskLabels,
+  toggleFollow,
+} from "@/app/actions/labels";
 import { PriorityBadge, StatusBadge } from "@/components/badges";
 import TaskCard from "@/components/TaskCard";
 import AttachmentSection from "@/components/AttachmentSection";
 import CommentBox from "@/components/CommentBox";
 import LabelChips from "@/components/LabelChips";
+import ResultNote from "@/components/ResultNote";
 import SubmitButton from "@/components/SubmitButton";
 import {
   LABEL_COLORS,
@@ -52,8 +60,10 @@ export const dynamic = "force-dynamic";
 
 export default async function TaskDetailPage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams: { error?: string };
 }) {
   const supabase = createClient();
   const user = await getUser(); // dedupe với layout
@@ -63,6 +73,9 @@ export default async function TaskDetailPage({
     { data: taskData },
     me,
     leaderTeamIds,
+    permRole,
+    permMap,
+    myTeams,
     { data: commentsData },
     { data: subtasksData },
     { data: teamsData },
@@ -74,6 +87,9 @@ export default async function TaskDetailPage({
     supabase.from("tasks").select(TASK_SELECT).eq("id", params.id).single(),
     getProfile(),
     getLeaderTeamIds(),
+    getMyPermRole(),
+    getPermMap(),
+    getMyTeamIds(),
     supabase
       .from("comments")
       .select("*, author:profiles(id,name)")
@@ -120,12 +136,33 @@ export default async function TaskDetailPage({
   const isAssigner = task.assigner_id === user!.id;
   const isManager = profile.role === "admin" || profile.role === "manager";
   const isLeader = !!task.team_id && leaderTeamIds.includes(task.team_id);
-  const canApprove = isAssigner || isManager || isLeader;
-  const canEdit = isAssigner || isManager || isLeader;
+
+  // Phân quyền động (admin cấu hình trong trang Quản trị)
+  const can = (p: string) =>
+    permRole === "admin" || !!permMap[permRole]?.[p];
+  const inMyTeam = !!task.team_id && myTeams.includes(task.team_id);
+  const canApprove =
+    isAssigner ||
+    (can("approve") &&
+      (permRole === "admin" || permRole === "manager" || inMyTeam));
+  // Sửa THÔNG TIN việc: chỉ admin/manager + người giao việc
+  // (DB cũng enforce bằng trigger protect_task_info — migration-v8)
+  const canEdit = (isAssigner && can("edit_own_task")) || isManager;
+  void isLeader;
+  const canEditResult = isAssignee || canEdit;
   const overdue = isOverdue(task);
+  const hasResult =
+    !!(task.result_note || "").trim() || attachments.length > 0;
+  const followerIds = new Set(followers.map((f) => f.user_id));
+  const addableUsers = users.filter((u) => !followerIds.has(u.id));
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
+      {searchParams.error && (
+        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          ⚠️ {searchParams.error}
+        </p>
+      )}
       {/* Header */}
       <div className="card">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -165,12 +202,51 @@ export default async function TaskDetailPage({
             </span>
           </div>
         </div>
-        {followers.length > 0 && (
-          <p className="mt-2 text-xs text-gray-400">
-            Đang theo dõi:{" "}
-            {followers.map((f) => f.follower?.name).filter(Boolean).join(", ")}
-          </p>
-        )}
+        {/* Người theo dõi */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+          <span className="text-xs text-gray-400">👁 Theo dõi:</span>
+          {followers.map((f) => (
+            <span
+              key={f.user_id}
+              className="flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+            >
+              {f.follower?.name}
+              {(f.user_id === user!.id || isManager) && (
+                <form action={removeFollower} className="inline">
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <input type="hidden" name="user_id" value={f.user_id} />
+                  <button
+                    className="text-gray-400 hover:text-red-500"
+                    title="Bỏ theo dõi"
+                  >
+                    ✕
+                  </button>
+                </form>
+              )}
+            </span>
+          ))}
+          {followers.length === 0 && (
+            <span className="text-xs text-gray-400">chưa có ai</span>
+          )}
+          {addableUsers.length > 0 && (
+            <form action={addFollower} className="flex items-center gap-1">
+              <input type="hidden" name="task_id" value={task.id} />
+              <select
+                name="user_id"
+                className="input !w-40 !px-2 !py-1 text-xs"
+              >
+                {addableUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+              <button className="btn-secondary !px-2 !py-1 text-xs">
+                + Thêm theo dõi
+              </button>
+            </form>
+          )}
+        </div>
         {task.description && (
           <p className="mt-4 whitespace-pre-wrap border-t border-gray-100 pt-4 text-sm text-gray-700">
             {task.description}
@@ -187,11 +263,23 @@ export default async function TaskDetailPage({
             </form>
           )}
           {task.status === "doing" && isAssignee && (
-            <form action={changeStatus}>
-              <input type="hidden" name="task_id" value={task.id} />
-              <input type="hidden" name="status" value="review" />
-              <SubmitButton>📤 Nộp duyệt</SubmitButton>
-            </form>
+            <div className="flex flex-col gap-1">
+              <form action={changeStatus}>
+                <input type="hidden" name="task_id" value={task.id} />
+                <input type="hidden" name="status" value="review" />
+                <SubmitButton
+                  className={hasResult ? "btn-primary" : "btn-secondary"}
+                >
+                  📤 Nộp duyệt
+                </SubmitButton>
+              </form>
+              {!hasResult && (
+                <span className="text-xs text-amber-600">
+                  ⚠️ Điền &quot;Kết quả công việc&quot; hoặc đính kèm file
+                  trước khi nộp
+                </span>
+              )}
+            </div>
           )}
           {task.status === "review" && canApprove && (
             <>
@@ -228,8 +316,44 @@ export default async function TaskDetailPage({
           <Link href={`/tasks/new?parent=${task.id}`} className="btn-secondary">
             + Task con
           </Link>
+          {(isAssigner || profile.role === "admin") && (
+            <form action={deleteTask} className="ml-auto">
+              <input type="hidden" name="task_id" value={task.id} />
+              <SubmitButton
+                className="btn-secondary !border-red-200 text-red-600 hover:!bg-red-50"
+                confirmText={`Xóa vĩnh viễn "${task.title}"? Bình luận, file đính kèm sẽ bị xóa theo; task con (nếu có) trở thành việc độc lập. Người liên quan sẽ nhận thông báo. Không thể hoàn tác.`}
+              >
+                🗑 Xóa task
+              </SubmitButton>
+            </form>
+          )}
         </div>
       </div>
+
+      {/* Kết quả công việc */}
+      <section className="card">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-700">
+            📝 Kết quả công việc
+          </h2>
+          {hasResult ? (
+            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+              Đã có kết quả
+            </span>
+          ) : (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              Chưa có kết quả
+            </span>
+          )}
+        </div>
+        <ResultNote
+          taskId={task.id}
+          note={task.result_note || ""}
+          canEdit={
+            canEditResult && !["done", "cancelled"].includes(task.status)
+          }
+        />
+      </section>
 
       {/* Nhãn */}
       {canEdit && (
@@ -373,17 +497,6 @@ export default async function TaskDetailPage({
               <SubmitButton>Lưu thay đổi</SubmitButton>
             </div>
           </form>
-          {(isAssigner || profile.role === "admin") && (
-            <form action={deleteTask} className="mt-3 border-t border-gray-100 pt-3">
-              <input type="hidden" name="task_id" value={task.id} />
-              <SubmitButton
-                className="text-sm text-red-600 hover:underline"
-                confirmText={`Xóa vĩnh viễn "${task.title}"? Bình luận, file đính kèm và task con sẽ mất liên kết. Không thể hoàn tác.`}
-              >
-                Xóa việc này
-              </SubmitButton>
-            </form>
-          )}
         </details>
       )}
 

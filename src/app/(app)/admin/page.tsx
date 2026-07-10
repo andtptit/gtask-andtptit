@@ -3,10 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import {
   addTeamMember,
   createMember,
+  deleteMember,
   removeTeamMember,
+  resetPermissions,
+  savePermissions,
   toggleLeader,
   updateUser,
 } from "@/app/actions/admin";
+import { EDITABLE_ROLES, PERMS, getPermMap } from "@/lib/permissions";
 import { ROLE_LABELS } from "@/lib/constants";
 import SubmitButton from "@/components/SubmitButton";
 import type { Profile, Team } from "@/lib/types";
@@ -37,13 +41,14 @@ export default async function AdminPage({
     .single();
   if (!me || !["admin", "manager"].includes(me.role)) redirect("/");
 
-  const [{ data: usersData }, { data: teamsData }, { data: membersData }] =
+  const [{ data: usersData }, { data: teamsData }, { data: membersData }, permMap] =
     await Promise.all([
       supabase.from("profiles").select("*").order("name"),
       supabase.from("teams").select("*").order("name"),
       supabase
         .from("team_members")
         .select("team_id, user_id, is_leader, profile:profiles(id,name)"),
+      getPermMap(),
     ]);
 
   const users = (usersData || []) as Profile[];
@@ -114,6 +119,75 @@ export default async function AdminPage({
         </section>
       )}
 
+      {/* Phân quyền vai trò (admin) */}
+      {me.role === "admin" && (
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-600">
+              Phân quyền vai trò
+            </h2>
+            <form action={resetPermissions}>
+              <SubmitButton
+                className="btn-secondary !px-2.5 !py-1 text-xs"
+                confirmText="Khôi phục toàn bộ quyền về mặc định theo ma trận ban đầu?"
+              >
+                ↺ Reset về mặc định
+              </SubmitButton>
+            </form>
+          </div>
+          <form action={savePermissions}>
+            <div className="card overflow-x-auto p-0">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-left text-xs text-gray-500">
+                  <tr>
+                    <th className="px-4 py-2">Quyền</th>
+                    <th className="px-3 py-2 text-center">Admin</th>
+                    {EDITABLE_ROLES.map((r) => (
+                      <th key={r} className="px-3 py-2 text-center">
+                        {ROLE_LABELS[r] || "Leader"}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {PERMS.map((p) => (
+                    <tr key={p.key} className="border-t border-gray-100">
+                      <td className="px-4 py-2">{p.label}</td>
+                      <td
+                        className="px-3 py-2 text-center"
+                        title="Admin luôn có full quyền"
+                      >
+                        ✅
+                      </td>
+                      {EDITABLE_ROLES.map((r) => (
+                        <td key={r} className="px-3 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            name={`${r}__${p.key}`}
+                            defaultChecked={!!permMap[r]?.[p.key]}
+                            className="h-4 w-4 accent-indigo-600"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <SubmitButton className="btn-primary">
+                Lưu phân quyền
+              </SubmitButton>
+              <span className="text-xs text-gray-500">
+                &quot;Nhóm mình&quot; = các nhóm user tham gia. Leader = người
+                được gắn ⭐ trong nhóm. Cần chạy{" "}
+                <code>migration-v7.sql</code> trước khi dùng.
+              </span>
+            </div>
+          </form>
+        </section>
+      )}
+
       {/* Thành viên */}
       <section>
         <h2 className="mb-3 text-sm font-semibold text-gray-600">
@@ -136,7 +210,7 @@ export default async function AdminPage({
                 <tr key={u.id} className="border-t border-gray-100">
                   <td className="px-4 py-2 font-medium">{u.name}</td>
                   <td className="px-4 py-2 text-gray-500">{u.email}</td>
-                  <td colSpan={4} className="px-2 py-2">
+                  <td colSpan={3} className="px-2 py-2">
                     <form
                       action={updateUser}
                       className="flex items-center gap-2"
@@ -171,6 +245,19 @@ export default async function AdminPage({
                         Lưu
                       </SubmitButton>
                     </form>
+                  </td>
+                  <td className="px-2 py-2">
+                    {me.role === "admin" && u.id !== user!.id && (
+                      <form action={deleteMember}>
+                        <input type="hidden" name="user_id" value={u.id} />
+                        <SubmitButton
+                          className="text-xs text-red-500 hover:underline"
+                          confirmText={`Xóa vĩnh viễn tài khoản "${u.name}"? Chỉ xóa được nếu user CHƯA phát sinh task/bình luận/file. User đã hoạt động thì nên bỏ tick Active thay vì xóa.`}
+                        >
+                          Xóa
+                        </SubmitButton>
+                      </form>
+                    )}
                   </td>
                 </tr>
               ))}

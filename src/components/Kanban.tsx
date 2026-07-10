@@ -122,6 +122,15 @@ export default function Kanban({
                       justDropped === t.id ? "kanban-card-dropped" : ""
                     }`}
                   >
+                    {t.parent && (
+                      <Link
+                        href={`/tasks/${t.parent.id}`}
+                        className="mb-0.5 block truncate text-[11px] text-gray-400 hover:text-indigo-500"
+                        title={`Việc cha: ${t.parent.title}`}
+                      >
+                        ↳ Việc con của: {t.parent.title}
+                      </Link>
+                    )}
                     <Link
                       href={`/tasks/${t.id}`}
                       className="block text-sm font-medium hover:text-indigo-600"

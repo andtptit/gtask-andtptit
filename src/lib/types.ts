@@ -36,6 +36,7 @@ export interface Task {
   parent_task_id: string | null;
   status: string;
   priority: string;
+  result_note: string | null;
   start_date: string | null;
   due_date: string | null;
   completed_at: string | null;
@@ -44,6 +45,7 @@ export interface Task {
   assignee?: { id: string; name: string } | null;
   assigner?: { id: string; name: string } | null;
   team?: { id: string; name: string } | null;
+  parent?: { id: string; title: string } | null;
   task_labels?: { label: Label | null }[];
 }
 

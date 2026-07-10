@@ -38,7 +38,12 @@ export async function middleware(request: NextRequest) {
   if (!session && !isLoginPage) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
-  if (session && isLoginPage) {
+  // Cho phép ở lại /login?disabled=1 (trang login sẽ tự signOut user bị vô hiệu hóa)
+  if (
+    session &&
+    isLoginPage &&
+    !request.nextUrl.searchParams.has("disabled")
+  ) {
     return NextResponse.redirect(new URL("/", request.url));
   }
   return response;

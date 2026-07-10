@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
-import TaskCard from "@/components/TaskCard";
+import TaskGroup from "@/components/TaskGroup";
 import { STATUSES, STATUS_LABELS } from "@/lib/constants";
-import { TASK_SELECT } from "@/lib/queries";
+import { TASK_SELECT, attachParents } from "@/lib/queries";
 import type { Label, Profile, Task, Team } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +12,7 @@ interface Filters {
   status?: string;
   assignee?: string;
   label?: string;
+  sub?: string;
 }
 
 export default async function TaskListPage({
@@ -59,13 +60,32 @@ export default async function TaskListPage({
   if (searchParams.status) query = query.eq("status", searchParams.status);
   if (searchParams.assignee)
     query = query.eq("assignee_id", searchParams.assignee);
+  if (searchParams.sub === "hide") query = query.is("parent_task_id", null);
   if (labelTaskIds !== null) {
     if (labelTaskIds.length === 0) query = query.in("id", ["00000000-0000-0000-0000-000000000000"]);
     else query = query.in("id", labelTaskIds);
   }
 
   const { data: tasksData } = await query;
-  const tasks = (tasksData || []) as unknown as Task[];
+  const tasks = await attachParents(
+    supabase,
+    (tasksData || []) as unknown as Task[]
+  );
+
+  // Gom việc con vào dưới việc cha (nếu cha cũng nằm trong kết quả lọc).
+  // Việc con "mồ côi" (cha không khớp bộ lọc) hiển thị độc lập kèm badge.
+  const idSet = new Set(tasks.map((t) => t.id));
+  const childrenByParent = new Map<string, Task[]>();
+  const topLevel: Task[] = [];
+  for (const t of tasks) {
+    if (t.parent_task_id && idSet.has(t.parent_task_id)) {
+      if (!childrenByParent.has(t.parent_task_id))
+        childrenByParent.set(t.parent_task_id, []);
+      childrenByParent.get(t.parent_task_id)!.push(t);
+    } else {
+      topLevel.push(t);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -137,20 +157,34 @@ export default async function TaskListPage({
             ))}
           </select>
         </div>
-        <div className="col-span-2 flex gap-2 md:col-span-6">
+        <div className="col-span-2 flex items-center gap-2 md:col-span-6">
           <button className="btn-primary">Lọc</button>
           <a href="/tasks" className="btn-secondary">
             Xóa bộ lọc
           </a>
+          <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              name="sub"
+              value="hide"
+              defaultChecked={searchParams.sub === "hide"}
+              className="h-4 w-4 accent-indigo-600"
+            />
+            Ẩn task con
+          </label>
           <span className="ml-auto self-center text-sm text-gray-500">
             {tasks.length} việc
           </span>
         </div>
       </form>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {tasks.map((t) => (
-          <TaskCard key={t.id} task={t} />
+      <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 lg:grid-cols-3">
+        {topLevel.map((t) => (
+          <TaskGroup
+            key={t.id}
+            task={t}
+            subtasks={childrenByParent.get(t.id) || []}
+          />
         ))}
       </div>
       {tasks.length === 0 && (

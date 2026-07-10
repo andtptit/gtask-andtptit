@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AppSkeleton } from "@/components/Skeletons";
@@ -17,6 +17,17 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
 
+  // Bị layout đẩy về do tài khoản vô hiệu hóa → đăng xuất + báo lỗi
+  useEffect(() => {
+    if (window.location.search.includes("disabled")) {
+      supabase.auth.signOut();
+      setError(
+        "Tài khoản của bạn đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên."
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function goHome() {
     // Hiện skeleton toàn app trong lúc server render trang chủ;
     // trang login unmount khi điều hướng xong
@@ -32,7 +43,7 @@ export default function LoginPage() {
     setInfo("");
 
     if (mode === "login") {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -40,7 +51,21 @@ export default function LoginPage() {
         setError("Email hoặc mật khẩu không đúng.");
         setLoading(false);
       } else {
-        goHome();
+        // Chặn đăng nhập nếu tài khoản bị vô hiệu hóa (Active = off)
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("is_active")
+          .eq("id", data.user!.id)
+          .single();
+        if (prof && prof.is_active === false) {
+          await supabase.auth.signOut();
+          setError(
+            "Tài khoản của bạn đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên."
+          );
+          setLoading(false);
+        } else {
+          goHome();
+        }
       }
     } else {
       const { data, error } = await supabase.auth.signUp({

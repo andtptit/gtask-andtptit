@@ -17,6 +17,11 @@ export default function TaskCard({
       href={`/tasks/${task.id}`}
       className={`card block hover:border-indigo-300 hover:shadow ${overdue ? "border-red-300" : ""}`}
     >
+      {task.parent && (
+        <div className="mb-1 truncate text-[11px] text-gray-400">
+          ↳ Việc con của: <span className="text-gray-500">{task.parent.title}</span>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2">
         <span className="font-medium leading-snug">{task.title}</span>
         <PriorityBadge priority={task.priority} />

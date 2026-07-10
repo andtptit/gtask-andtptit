@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getLeaderTeamIds, getProfile } from "@/lib/auth";
+import { getMyPermRole, getMyTeamIds, getPermMap } from "@/lib/permissions";
 import type { Team } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -130,11 +130,12 @@ function StatTable({ title, stats }: { title: string; stats: Stat[] }) {
 export default async function ReportsPage() {
   const supabase = createClient();
 
-  // 1 lượt song song duy nhất (profile + leader cache chung với layout)
-  const [me, leaderTeamIds, { data: teamsData }, { data: tasksData }] =
+  // 1 lượt song song duy nhất (perm role/map cache chung với layout)
+  const [permRole, permMap, myTeams, { data: teamsData }, { data: tasksData }] =
     await Promise.all([
-      getProfile(),
-      getLeaderTeamIds(),
+      getMyPermRole(),
+      getPermMap(),
+      getMyTeamIds(),
       supabase.from("teams").select("*").order("name"),
       supabase
         .from("tasks")
@@ -145,14 +146,18 @@ export default async function ReportsPage() {
         .limit(5000),
     ]);
 
-  const isManager = !!me && ["admin", "manager"].includes(me.role);
-  if (!isManager && leaderTeamIds.length === 0) redirect("/");
+  // Phân quyền động: xem toàn phòng / chỉ nhóm mình
+  const can = (p: string) =>
+    permRole === "admin" || !!permMap[permRole]?.[p];
+  const seeAll = can("view_reports_all");
+  const seeTeam = can("view_reports_team") && myTeams.length > 0;
+  if (!seeAll && !seeTeam) redirect("/");
   const teams = (teamsData || []) as Team[];
   let tasks = (tasksData || []) as unknown as RTask[];
 
-  // Leader (không phải manager): chỉ xem nhóm mình
-  if (!isManager) {
-    tasks = tasks.filter((t) => t.team_id && leaderTeamIds.includes(t.team_id));
+  // Chỉ được xem báo cáo nhóm mình
+  if (!seeAll) {
+    tasks = tasks.filter((t) => t.team_id && myTeams.includes(t.team_id));
   }
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));

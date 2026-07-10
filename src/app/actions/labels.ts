@@ -30,6 +30,50 @@ export async function setTaskLabels(formData: FormData) {
   revalidatePath("/tasks");
 }
 
+// Thêm người khác vào theo dõi task (được phép thêm thành viên nhóm khác)
+export async function addFollower(formData: FormData) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const taskId = String(formData.get("task_id"));
+  const userId = String(formData.get("user_id") || "");
+  if (!userId) return;
+
+  const { error } = await supabase
+    .from("task_followers")
+    .insert({ task_id: taskId, user_id: userId });
+
+  if (!error && userId !== user.id) {
+    const { data: task } = await supabase
+      .from("tasks")
+      .select("title")
+      .eq("id", taskId)
+      .single();
+    await supabase.from("notifications").insert({
+      user_id: userId,
+      task_id: taskId,
+      type: "follower",
+      content: `Bạn được thêm vào theo dõi việc: "${task?.title || ""}"`,
+    });
+  }
+  revalidatePath(`/tasks/${taskId}`);
+}
+
+// Xóa người theo dõi (RLS: chính mình hoặc admin/manager)
+export async function removeFollower(formData: FormData) {
+  const supabase = createClient();
+  const taskId = String(formData.get("task_id"));
+  await supabase
+    .from("task_followers")
+    .delete()
+    .eq("task_id", taskId)
+    .eq("user_id", String(formData.get("user_id")));
+  revalidatePath(`/tasks/${taskId}`);
+}
+
 export async function toggleFollow(formData: FormData) {
   const supabase = createClient();
   const {

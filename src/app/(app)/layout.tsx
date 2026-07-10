@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getLeaderTeamIds, getProfile, getUser } from "@/lib/auth";
+import { getProfile, getUser } from "@/lib/auth";
+import { getMyPermRole, getMyTeamIds, getPermMap } from "@/lib/permissions";
 import { signOut } from "@/app/actions/auth";
 import NavLinks from "@/components/NavLinks";
 import NotificationBell from "@/components/NotificationBell";
@@ -19,9 +20,11 @@ export default async function AppLayout({
   if (!user) redirect("/login");
 
   const supabase = createClient();
-  const [me, leaderTeamIds, { data: notifs }] = await Promise.all([
+  const [me, permRole, permMap, myTeams, { data: notifs }] = await Promise.all([
     getProfile(),
-    getLeaderTeamIds(),
+    getMyPermRole(),
+    getPermMap(),
+    getMyTeamIds(),
     supabase
       .from("notifications")
       .select("*")
@@ -30,9 +33,17 @@ export default async function AppLayout({
       .limit(10),
   ]);
 
+  // Tài khoản bị vô hiệu hóa (Active = off) → đăng xuất + chặn truy cập
+  if (me && me.is_active === false) redirect("/login?disabled=1");
+
   const notifications = (notifs || []) as Notification[];
   const isAdmin = me?.role === "admin" || me?.role === "manager";
-  const canSeeReports = isAdmin || leaderTeamIds.length > 0;
+  // Phân quyền động: hiện menu Báo cáo theo quyền được cấp
+  const can = (p: string) =>
+    permRole === "admin" || !!permMap[permRole]?.[p];
+  const canSeeReports =
+    can("view_reports_all") ||
+    (can("view_reports_team") && myTeams.length > 0);
 
   return (
     <div className="min-h-screen">

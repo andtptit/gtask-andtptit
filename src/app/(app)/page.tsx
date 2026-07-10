@@ -1,22 +1,60 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getUser } from "@/lib/auth";
 import TaskCard from "@/components/TaskCard";
-import { TASK_SELECT } from "@/lib/queries";
+import { TASK_SELECT, attachParents } from "@/lib/queries";
 import type { Task } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function MyTasksPage() {
+const VIEWS = [
+  { key: "mine", label: "Tôi thực hiện" },
+  { key: "assigned", label: "Tôi giao việc" },
+  { key: "follow", label: "Tôi theo dõi" },
+] as const;
+
+const EMPTY_MSG: Record<string, string> = {
+  mine: "Bạn chưa có việc nào đang mở. Tuyệt vời! 🎉",
+  assigned: "Bạn chưa giao việc nào đang mở.",
+  follow: "Bạn chưa theo dõi việc nào đang mở. Bấm 🔔 Theo dõi trong task để nhận cập nhật.",
+};
+
+export default async function MyTasksPage({
+  searchParams,
+}: {
+  searchParams: { view?: string };
+}) {
   const supabase = createClient();
   const user = await getUser(); // dedupe với layout — không gọi mạng lần 2
+  const view = ["assigned", "follow"].includes(searchParams.view || "")
+    ? (searchParams.view as "assigned" | "follow")
+    : "mine";
+
+  // Lọc nhanh: tôi thực hiện / tôi giao / tôi theo dõi
+  let taskQuery = supabase
+    .from("tasks")
+    .select(TASK_SELECT)
+    .not("status", "in", "(done,cancelled)")
+    .order("due_date", { ascending: true, nullsFirst: false });
+
+  if (view === "mine") {
+    taskQuery = taskQuery.eq("assignee_id", user!.id);
+  } else if (view === "assigned") {
+    taskQuery = taskQuery.eq("assigner_id", user!.id);
+  } else {
+    const { data: followRows } = await supabase
+      .from("task_followers")
+      .select("task_id")
+      .eq("user_id", user!.id);
+    const ids = (followRows || []).map((r) => r.task_id as string);
+    taskQuery = taskQuery.in(
+      "id",
+      ids.length > 0 ? ids : ["00000000-0000-0000-0000-000000000000"]
+    );
+  }
 
   const [{ data: mine }, { data: waitingReview }] = await Promise.all([
-    supabase
-      .from("tasks")
-      .select(TASK_SELECT)
-      .eq("assignee_id", user!.id)
-      .not("status", "in", "(done,cancelled)")
-      .order("due_date", { ascending: true, nullsFirst: false }),
+    taskQuery,
     supabase
       .from("tasks")
       .select(TASK_SELECT)
@@ -25,7 +63,10 @@ export default async function MyTasksPage() {
       .order("updated_at", { ascending: false }),
   ]);
 
-  const tasks = (mine || []) as unknown as Task[];
+  const tasks = await attachParents(
+    supabase,
+    (mine || []) as unknown as Task[]
+  );
   const review = ((waitingReview || []) as unknown as Task[]).filter(
     (t) => t.assignee_id !== user!.id
   );
@@ -64,13 +105,26 @@ export default async function MyTasksPage() {
   ];
 
   return (
-    <div className="flex flex-col gap-8">
-      <h1 className="text-xl font-bold">Việc của tôi</h1>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="mr-4 text-xl font-bold">Việc của tôi</h1>
+        {VIEWS.map((v) => (
+          <Link
+            key={v.key}
+            href={v.key === "mine" ? "/" : `/?view=${v.key}`}
+            className={`rounded-full px-3 py-1 text-sm ${
+              view === v.key
+                ? "bg-indigo-600 text-white"
+                : "border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            {v.label}
+          </Link>
+        ))}
+      </div>
 
       {tasks.length === 0 && (
-        <p className="text-gray-500">
-          Bạn chưa có việc nào đang mở. Tuyệt vời! 🎉
-        </p>
+        <p className="text-gray-500">{EMPTY_MSG[view]}</p>
       )}
 
       {sections.map(
