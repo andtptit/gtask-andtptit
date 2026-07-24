@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUser } from "@/lib/auth";
 import { createTask } from "@/app/actions/tasks";
-import { PRIORITIES, PRIORITY_LABELS } from "@/lib/constants";
+import { PRIORITIES, PRIORITY_LABELS, nowDatetimeLocal } from "@/lib/constants";
 import SubmitButton from "@/components/SubmitButton";
 import RichTextEditor from "@/components/RichTextEditor";
 import type { Profile, Team } from "@/lib/types";
@@ -89,7 +89,12 @@ export default async function NewTaskPage({
           </div>
           <div>
             <label className="label">Deadline</label>
-            <input type="datetime-local" name="due_date" className="input" />
+            <input
+              type="datetime-local"
+              name="due_date"
+              className="input"
+              min={nowDatetimeLocal()}
+            />
           </div>
         </div>
         <SubmitButton className="btn-primary justify-center">

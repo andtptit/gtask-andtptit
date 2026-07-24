@@ -3,13 +3,18 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addComment } from "@/app/actions/comments";
+import { Spinner } from "./SubmitButton";
 
 export default function CommentBox({
   taskId,
   users,
+  onOptimisticSend,
 }: {
   taskId: string;
   users: { id: string; name: string }[];
+  // Gọi ngay khi bấm Gửi (trước khi server xử lý xong) để component cha
+  // chèn bình luận vào danh sách ngay lập tức — cảm giác gửi tức thì.
+  onOptimisticSend?: (content: string) => void;
 }) {
   const [value, setValue] = useState("");
   const [suggest, setSuggest] = useState<{ id: string; name: string }[]>([]);
@@ -46,12 +51,14 @@ export default function CommentBox({
     e.preventDefault();
     const content = value.trim();
     if (!content) return;
+    onOptimisticSend?.(content);
+    setValue("");
+    setSuggest([]);
     const fd = new FormData();
     fd.set("task_id", taskId);
     fd.set("content", content);
     startTransition(async () => {
       await addComment(fd);
-      setValue("");
       router.refresh();
     });
   }
@@ -82,8 +89,12 @@ export default function CommentBox({
           onChange={handleChange}
           required
         />
-        <button className="btn-primary shrink-0 self-end" disabled={isPending}>
-          {isPending ? "..." : "Gửi"}
+        <button
+          className={`btn-primary shrink-0 self-end ${isPending ? "pointer-events-none opacity-60" : ""}`}
+          disabled={isPending}
+        >
+          {isPending && <Spinner />}
+          Gửi
         </button>
       </div>
     </form>

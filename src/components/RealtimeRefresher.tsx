@@ -33,9 +33,7 @@ export default function RealtimeRefresher() {
             timer.current = setTimeout(() => router.refresh(), 400);
           }
         )
-        .subscribe((status) => {
-          console.log("[GTask] tasks realtime:", status);
-        });
+        .subscribe();
     })();
 
     return () => {

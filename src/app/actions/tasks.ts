@@ -114,19 +114,18 @@ export async function createTask(formData: FormData) {
   redirect(`/tasks/${data.id}`);
 }
 
-export async function changeStatus(formData: FormData) {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const taskId = String(formData.get("task_id"));
-  const status = String(formData.get("status"));
-  const note = String(formData.get("note") || "").trim();
-
+// Logic đổi trạng thái dùng chung cho cả 2 lối gọi:
+// - changeStatus(formData): <form action=...> (progressive enhancement)
+// - changeTaskStatus(...): gọi thẳng từ client component để làm optimistic UI
+async function changeStatusCore(
+  supabase: Supa,
+  userId: string,
+  taskId: string,
+  status: string,
+  note: string
+): Promise<{ error?: string }> {
   if (status === "review" && !(await hasResult(supabase, taskId))) {
-    redirect(`/tasks/${taskId}?error=${encodeURIComponent(MISSING_RESULT_MSG)}`);
+    return { error: MISSING_RESULT_MSG };
   }
 
   const update: Record<string, unknown> = { status };
@@ -140,15 +139,15 @@ export async function changeStatus(formData: FormData) {
     .single();
 
   if (error || !data) {
-    revalidatePath(`/tasks/${taskId}`);
-    return;
+    return { error: error?.message || "Không cập nhật được trạng thái" };
   }
 
-  if (note) {
+  const trimmedNote = note.trim();
+  if (trimmedNote) {
     await supabase.from("comments").insert({
       task_id: taskId,
-      user_id: user.id,
-      content: `[Trả lại] ${note}`,
+      user_id: userId,
+      content: `[Trả lại] ${trimmedNote}`,
     });
   }
 
@@ -156,7 +155,7 @@ export async function changeStatus(formData: FormData) {
   await notify(
     supabase,
     [data.assigner_id, data.assignee_id, ...followers],
-    user.id,
+    userId,
     taskId,
     "status",
     `"${data.title}" chuyển sang: ${STATUS_LABELS[status] || status}`
@@ -165,6 +164,40 @@ export async function changeStatus(formData: FormData) {
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath("/");
   revalidatePath("/board");
+  return {};
+}
+
+export async function changeStatus(formData: FormData) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const taskId = String(formData.get("task_id"));
+  const status = String(formData.get("status"));
+  const note = String(formData.get("note") || "");
+
+  const res = await changeStatusCore(supabase, user.id, taskId, status, note);
+  if (res.error) {
+    redirect(`/tasks/${taskId}?error=${encodeURIComponent(res.error)}`);
+  }
+}
+
+// Biến thể gọi trực tiếp (không qua FormData) cho TaskStatusActions —
+// trả về {error?} thay vì redirect, để client tự revert optimistic UI.
+export async function changeTaskStatus(
+  taskId: string,
+  status: string,
+  note = ""
+): Promise<{ error?: string }> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Chưa đăng nhập" };
+
+  return changeStatusCore(supabase, user.id, taskId, status, note);
 }
 
 export async function moveTask(taskId: string, status: string) {

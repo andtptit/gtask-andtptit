@@ -86,6 +86,16 @@ export function toDatetimeLocal(d: string | null | undefined) {
     .replace(" ", "T");
 }
 
+// "Bây giờ" theo giờ VN, định dạng cho input type="datetime-local" min=... —
+// chặn chọn deadline quá khứ ngay trên trình duyệt, khỏi phải round-trip
+// server rồi redirect báo lỗi.
+export function nowDatetimeLocal() {
+  return new Date()
+    .toLocaleString("sv-SE", { timeZone: APP_TZ })
+    .slice(0, 16)
+    .replace(" ", "T");
+}
+
 // Giá trị datetime-local ("2026-07-09T15:00", giờ VN) → ISO UTC để lưu timestamptz
 export function dueDateToUtc(v: string | null | undefined) {
   if (!v) return null;

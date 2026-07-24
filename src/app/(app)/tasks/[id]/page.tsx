@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { getLeaderTeamIds, getProfile, getUser } from "@/lib/auth";
 import { getMyPermRole, getMyTeamIds, getPermMap } from "@/lib/permissions";
 import { changeStatus, deleteTask, updateTask } from "@/app/actions/tasks";
-import { deleteComment } from "@/app/actions/comments";
 import {
   addFollower,
   createLabel,
@@ -15,11 +14,12 @@ import {
 import { PriorityBadge, StatusBadge } from "@/components/badges";
 import TaskCard from "@/components/TaskCard";
 import AttachmentSection from "@/components/AttachmentSection";
-import CommentBox from "@/components/CommentBox";
+import CommentSection from "@/components/CommentSection";
 import LabelChips from "@/components/LabelChips";
 import ResultNote from "@/components/ResultNote";
 import SubmitButton from "@/components/SubmitButton";
 import RichTextEditor from "@/components/RichTextEditor";
+import TaskStatusActions from "@/components/TaskStatusActions";
 import { sanitizeHtml } from "@/lib/sanitize";
 import {
   LABEL_COLORS,
@@ -29,25 +29,6 @@ import {
   isOverdue,
   toDatetimeLocal,
 } from "@/lib/constants";
-
-// Highlight "@Tên" trong bình luận
-function renderWithMentions(content: string, names: string[]) {
-  if (names.length === 0) return content;
-  const escaped = names
-    .slice()
-    .sort((a, b) => b.length - a.length)
-    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const parts = content.split(new RegExp(`@(${escaped.join("|")})`, "g"));
-  return parts.map((p, i) =>
-    i % 2 === 1 ? (
-      <span key={i} className="font-medium text-indigo-600">
-        @{p}
-      </span>
-    ) : (
-      p
-    )
-  );
-}
 import { TASK_SELECT } from "@/lib/queries";
 import type {
   Attachment,
@@ -258,51 +239,13 @@ export default async function TaskDetailPage({
 
         {/* Actions theo trạng thái */}
         <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-4">
-          {task.status === "new" && isAssignee && (
-            <form action={changeStatus}>
-              <input type="hidden" name="task_id" value={task.id} />
-              <input type="hidden" name="status" value="doing" />
-              <SubmitButton>▶ Bắt đầu làm</SubmitButton>
-            </form>
-          )}
-          {task.status === "doing" && isAssignee && (
-            <div className="flex flex-col gap-1">
-              <form action={changeStatus}>
-                <input type="hidden" name="task_id" value={task.id} />
-                <input type="hidden" name="status" value="review" />
-                <SubmitButton
-                  className={hasResult ? "btn-primary" : "btn-secondary"}
-                >
-                  📤 Nộp duyệt
-                </SubmitButton>
-              </form>
-              {!hasResult && (
-                <span className="text-xs text-amber-600">
-                  ⚠️ Điền &quot;Kết quả công việc&quot; hoặc đính kèm file
-                  trước khi nộp
-                </span>
-              )}
-            </div>
-          )}
-          {task.status === "review" && canApprove && (
-            <>
-              <form action={changeStatus}>
-                <input type="hidden" name="task_id" value={task.id} />
-                <input type="hidden" name="status" value="done" />
-                <SubmitButton>✅ Duyệt hoàn thành</SubmitButton>
-              </form>
-              <form action={changeStatus} className="flex items-center gap-2">
-                <input type="hidden" name="task_id" value={task.id} />
-                <input type="hidden" name="status" value="doing" />
-                <input
-                  name="note"
-                  className="input !w-56"
-                  placeholder="Lý do trả lại..."
-                />
-                <SubmitButton className="btn-secondary">↩ Trả lại</SubmitButton>
-              </form>
-            </>
-          )}
+          <TaskStatusActions
+            taskId={task.id}
+            initialStatus={task.status}
+            isAssignee={isAssignee}
+            canApprove={canApprove}
+            hasResult={hasResult}
+          />
           {!["done", "cancelled"].includes(task.status) &&
             (isAssigner || isManager) && (
               <form action={changeStatus}>
@@ -530,46 +473,13 @@ export default async function TaskDetailPage({
       )}
 
       {/* Bình luận */}
-      <section className="card">
-        <h2 className="mb-3 text-sm font-semibold text-gray-700">
-          Trao đổi ({comments.length})
-        </h2>
-        <div className="flex flex-col gap-3">
-          {comments.map((c) => (
-            <div key={c.id} className="rounded-lg bg-gray-50 p-3">
-              <div className="flex items-center justify-between text-xs text-gray-500">
-                <span className="font-semibold text-gray-700">
-                  {c.author?.name}
-                </span>
-                <span className="flex items-center gap-2">
-                  {fmtDateTime(c.created_at)}
-                  {c.user_id === user!.id && (
-                    <form action={deleteComment}>
-                      <input type="hidden" name="comment_id" value={c.id} />
-                      <input type="hidden" name="task_id" value={task.id} />
-                      <SubmitButton
-                        className="text-red-500 hover:underline"
-                        confirmText="Xóa bình luận này?"
-                      >
-                        Xóa
-                      </SubmitButton>
-                    </form>
-                  )}
-                </span>
-              </div>
-              <p className="mt-1 whitespace-pre-wrap text-sm">
-                {renderWithMentions(c.content, users.map((u) => u.name))}
-              </p>
-            </div>
-          ))}
-        </div>
-        <CommentBox
-          taskId={task.id}
-          users={users
-            .filter((u) => u.id !== user!.id)
-            .map((u) => ({ id: u.id, name: u.name }))}
-        />
-      </section>
+      <CommentSection
+        taskId={task.id}
+        initialComments={comments}
+        currentUserId={user!.id}
+        currentUserName={profile.name}
+        users={users.map((u) => ({ id: u.id, name: u.name }))}
+      />
     </div>
   );
 }

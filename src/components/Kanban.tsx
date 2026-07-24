@@ -66,8 +66,11 @@ export default function Kanban({
       if (res?.error) {
         showToast(res.error);
         setItems(prev);
+        // Chỉ cần refresh khi lỗi để lấy lại dữ liệu đúng — thành công thì
+        // RealtimeRefresher (mount sẵn ở trang Board) sẽ tự đồng bộ qua
+        // realtime, khỏi phải fetch lại 2 lần cho cùng 1 thay đổi.
+        router.refresh();
       }
-      router.refresh();
     });
   }
 
