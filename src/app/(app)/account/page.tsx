@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { Spinner } from "@/components/SubmitButton";
 
 export default function AccountPage() {
   const [password, setPassword] = useState("");
@@ -70,7 +71,11 @@ export default function AccountPage() {
             ✓ Đã đổi mật khẩu. Lần đăng nhập sau dùng mật khẩu mới.
           </p>
         )}
-        <button className="btn-primary justify-center" disabled={loading}>
+        <button
+          className={`btn-primary justify-center ${loading ? "pointer-events-none opacity-60" : ""}`}
+          disabled={loading}
+        >
+          {loading && <Spinner />}
           {loading ? "Đang xử lý…" : "Đổi mật khẩu"}
         </button>
       </form>

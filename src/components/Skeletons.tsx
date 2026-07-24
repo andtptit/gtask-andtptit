@@ -134,6 +134,35 @@ export function CalendarSkeleton() {
   );
 }
 
+// Khung form 1 cột (VD: trang "Giao việc mới") — input tiêu đề, mô tả,
+// lưới field, nút submit.
+export function FormSkeleton() {
+  return (
+    <div className="mx-auto max-w-xl">
+      <div className="skeleton mb-4 h-7 w-40" />
+      <div className="card flex flex-col gap-4">
+        <div>
+          <div className="skeleton mb-1 h-3 w-14" />
+          <div className="skeleton h-9 w-full rounded-lg" />
+        </div>
+        <div>
+          <div className="skeleton mb-1 h-3 w-24" />
+          <div className="skeleton h-24 w-full rounded-lg" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i}>
+              <div className="skeleton mb-1 h-3 w-16" />
+              <div className="skeleton h-9 w-full rounded-lg" />
+            </div>
+          ))}
+        </div>
+        <div className="skeleton h-9 w-28 rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
 export function DetailSkeleton() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
