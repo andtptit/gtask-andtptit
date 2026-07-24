@@ -3,6 +3,7 @@ import { getUser } from "@/lib/auth";
 import { createTask } from "@/app/actions/tasks";
 import { PRIORITIES, PRIORITY_LABELS } from "@/lib/constants";
 import SubmitButton from "@/components/SubmitButton";
+import RichTextEditor from "@/components/RichTextEditor";
 import type { Profile, Team } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +44,10 @@ export default async function NewTaskPage({
         </div>
         <div>
           <label className="label">Mô tả / Brief</label>
-          <textarea name="description" className="input" rows={4} />
+          <RichTextEditor
+            name="description"
+            placeholder="Yêu cầu chi tiết, kích thước, định dạng, link tài liệu đính kèm…"
+          />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>

@@ -19,6 +19,8 @@ import CommentBox from "@/components/CommentBox";
 import LabelChips from "@/components/LabelChips";
 import ResultNote from "@/components/ResultNote";
 import SubmitButton from "@/components/SubmitButton";
+import RichTextEditor from "@/components/RichTextEditor";
+import { sanitizeHtml } from "@/lib/sanitize";
 import {
   LABEL_COLORS,
   PRIORITIES,
@@ -248,9 +250,10 @@ export default async function TaskDetailPage({
           )}
         </div>
         {task.description && (
-          <p className="mt-4 whitespace-pre-wrap border-t border-gray-100 pt-4 text-sm text-gray-700">
-            {task.description}
-          </p>
+          <div
+            className="rich-text mt-4 border-t border-gray-100 pt-4 text-sm text-gray-700"
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(task.description) }}
+          />
         )}
 
         {/* Actions theo trạng thái */}
@@ -432,12 +435,7 @@ export default async function TaskDetailPage({
             </div>
             <div>
               <label className="label">Mô tả</label>
-              <textarea
-                name="description"
-                className="input"
-                rows={3}
-                defaultValue={task.description || ""}
-              />
+              <RichTextEditor name="description" defaultValue={task.description || ""} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

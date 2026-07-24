@@ -6,6 +6,7 @@ import TaskCard from "./TaskCard";
 import { PriorityBadge, StatusBadge } from "./badges";
 import LabelChips from "./LabelChips";
 import { fmtDate, isOverdue } from "@/lib/constants";
+import { stripHtml } from "@/lib/sanitize";
 import type { Task } from "@/lib/types";
 
 // Popover xem nhanh chi tiết việc con khi hover
@@ -47,7 +48,7 @@ function SubtaskPreview({ task }: { task: Task }) {
         <div className="mt-2 border-t border-gray-100 pt-2">
           <span className="text-gray-400">Mô tả:</span>
           <p className="line-clamp-3 whitespace-pre-wrap text-gray-700">
-            {task.description}
+            {stripHtml(task.description || "")}
           </p>
         </div>
       )}

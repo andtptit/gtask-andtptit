@@ -77,6 +77,30 @@
   .kanban-col-over {
     @apply scale-[1.01] border-indigo-400 bg-indigo-50 ring-2 ring-indigo-200;
   }
+
+  /* Nội dung mô tả/brief dạng rich text (RichTextEditor + hiển thị) */
+  .rich-text p {
+    @apply mb-2 last:mb-0;
+  }
+  .rich-text ul {
+    @apply mb-2 list-disc pl-5 last:mb-0;
+  }
+  .rich-text ol {
+    @apply mb-2 list-decimal pl-5 last:mb-0;
+  }
+  .rich-text blockquote {
+    @apply mb-2 border-l-2 border-gray-300 pl-3 italic text-gray-600 last:mb-0;
+  }
+  .rich-text a {
+    @apply text-indigo-600 underline hover:text-indigo-700;
+  }
+  .rich-text p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+    @apply text-gray-400;
+  }
 }
 
 @keyframes shimmer {
