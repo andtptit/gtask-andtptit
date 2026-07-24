@@ -212,7 +212,7 @@ create policy "notifications_insert" on public.notifications
 -- ---------- SEED ----------
 
 insert into public.teams (name, description) values
-  ('Content', 'Nhóm Content — bài viết, kịch bản, SEO'),
+  ('Thương hiệu', 'Nhóm Thương hiệu — bài viết, kịch bản, SEO'),
   ('Media', 'Nhóm Media — thiết kế, video, hình ảnh'),
   ('CRM', 'Nhóm CRM — chăm sóc khách hàng, data');
 

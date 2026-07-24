@@ -195,8 +195,8 @@ export default async function CalendarPage({
         </div>
       </div>
       <p className="text-xs text-gray-400">
-        Task hiển thị theo deadline. Chọn nhóm Content để dùng như Content
-        Calendar.
+        Task hiển thị theo deadline. Chọn nhóm Thương hiệu để dùng như lịch
+        nội dung (Content Calendar).
       </p>
     </div>
   );
